@@ -1,0 +1,84 @@
+---
+title: "HAR Prediction Model via randomForest"
+author: "Pranjal Mandhaniya"
+date: "Sunday 25 January 2015"
+output: html_document
+---
+
+### Firstly reading input from csv files
+
+```{r,cache=TRUE,message=FALSE}
+library(RCurl)
+train <- read.csv(text = getURL("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+test <- read.csv(text = getURL("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+
+```
+
+### Put some scaling efforts to get useful but small formula.
+
+```{r,cache=TRUE}
+# Remove NA and empty columns because they most probably won't affect much.
+nt <- train[ , (colSums(is.na(train)) == 0)&(colSums(train == "") == 0)]
+
+```{r,message=F,cache=TRUE}
+library(dplyr)
+```
+```{r,cache=TRUE}
+# Selecting only numeric and integer columns plus classe column. 
+ndt <- select(nt,num_window:classe) 
+```
+
+### Check for useful variables which change significantly w.r.t classe.
+
+```{r,cache=TRUE,warning=FALSE}
+# Aggregate cleaned data for coefficient of variation wrt each classe.
+abscov <- aggregate(.~classe,data = ndt,FUN = function(x){abs(sd(x)/mean(x))})
+
+# Check columnwise coefficient of variation.
+covcol <- data.frame(sapply(abscov,FUN = function(x){abs(sd(x)/mean(x))}),names(abscov))
+
+# Filter those columns whose C.o.V is greater than 1 i.e. significant.
+needed <- covcol[(covcol[,1]>1),]
+
+# From main data i.e train , select significant columns.
+pred <- train[,(names(train) %in% as.character(unlist(needed[2])))|(names(train)=="classe")]
+```
+
+### Fitting model by randomForest and Prediction.
+```{r,cache=TRUE}
+# Use randomForest and set seed for reproducible results.
+```{r,message=F,cache=TRUE}
+library(randomForest)
+```
+```{r,cache=TRUE}
+set.seed(33)
+
+# Fit model on Scaled data frame and print output confusion matrix.
+fit <- randomForest(classe~., data=pred, importance=TRUE, ntree=2000)
+fit
+
+# Predict test data with above formula.
+prediction <- predict(fit, test)
+prediction
+```
+
+### Writing files within a folder
+```{r,cache=TRUE}
+# Function to write files.
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+# Set and create a working directory folder.
+mndir <- getwd()
+sbdir <- "pml_ans"
+dir.create(file.path(mndir, sbdir), showWarnings = FALSE)
+setwd(file.path(mndir, sbdir))
+
+# Writing in folder.
+pml_write_files(prediction)
+```
